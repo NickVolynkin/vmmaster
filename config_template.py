@@ -50,6 +50,14 @@ class Config(object):
     }
     OPENSTACK_VM_USERDATA_FILE_PATH = "%s/userdata" % os.path.abspath(os.curdir)
 
+    USE_CUSTOM_NETWORK = True
+    BIND_LOCALHOST_PORTS = False
+    DOCKER_MAX_COUNT = 1
+    DOCKER_PRELOADED = {}
+    DOCKER_BASE_URL = 'unix://var/run/docker.sock'
+    DOCKER_TIMEOUT = 120
+    DOCKER_NUM_POOLS = 100
+
     VM_CREATE_CHECK_PAUSE = 5
     VM_CREATE_CHECK_ATTEMPTS = 1000
     PRELOADER_FREQUENCY = 3

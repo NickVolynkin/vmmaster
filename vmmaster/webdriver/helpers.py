@@ -85,7 +85,7 @@ def take_screenshot_from_response(session, body):
 def take_screenshot_from_session(session):
     if session.take_screenshot:
         for screenshot in commands.take_screenshot(session,
-                                                   config.VMMASTER_AGENT_PORT):
+                                                   session.endpoint.get_bind_port(config.VMMASTER_AGENT_PORT)):
             pass
     else:
         screenshot = None
@@ -140,7 +140,7 @@ def transparent():
     status, headers, body = None, None, None
     swap_session(request, request.session.selenium_session)
     for status, headers, body in request.session.make_request(
-        config.SELENIUM_PORT,
+        request.session.endpoint.get_bind_port(config.SELENIUM_PORT),
         RequestHelper(
             request.method, request.path, request.headers, request.data
         )

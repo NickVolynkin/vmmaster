@@ -26,6 +26,7 @@ def getresponse(req, q):
 
 
 class RequestHelper(object):
+    
     method = None
     url = None
     headers = None
@@ -37,7 +38,7 @@ class RequestHelper(object):
             for key, value in headers.items():
                 if value:
                     _headers[key] = value
-        _headers["Content-Length"] = len(data)
+        _headers["Content-Length"] = str(len(data))
         self.headers = _headers
         self.method = method
         self.url = url

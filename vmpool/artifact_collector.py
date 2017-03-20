@@ -99,7 +99,7 @@ def get_artifact_from_endpoint(session, path):
     :return: status, headers, body
     """
     host = "ws://%s:%s/runScript" % (session.endpoint_ip,
-                                     config.VMMASTER_AGENT_PORT)
+                                     session.endpoint.get_bind_port(config.VMMASTER_AGENT_PORT))
     script = '{"command": "sudo -S sh", "script": "cat %s"}' % path
     for status, headers, body in run_script(script, host):
         yield None, None, None

@@ -57,17 +57,17 @@ def start_session(request, session):
              % (session.id, session.endpoint_name, session.endpoint_ip))
     status, headers, body = None, None, None
 
-    ping_vm(session)
+    ping_vm(session, ports=session.endpoint.ports.values())
     yield status, headers, body
 
-    selenium_status(request, session, config.SELENIUM_PORT)
+    selenium_status(request, session, session.endpoint.get_bind_port(config.SELENIUM_PORT))
     yield status, headers, body
 
     if session.run_script:
         startup_script(session)
 
     status, headers, body = start_selenium_session(
-        request, session, config.SELENIUM_PORT
+        request, session, session.endpoint.get_bind_port(config.SELENIUM_PORT)
     )
 
     selenium_session = json.loads(body)["sessionId"]
@@ -92,9 +92,8 @@ def startup_script(session):
 
 
 @connection_watcher
-def ping_vm(session):
+def ping_vm(session, ports=config.PORTS):
     ip = check_to_exist_ip(session)
-    ports = [config.SELENIUM_PORT, config.VMMASTER_AGENT_PORT]
 
     log.info("Starting ping: {ip}:{ports}".format(ip=ip, ports=str(ports)))
     _ping = partial(network_utils.ping, ip)
@@ -300,7 +299,7 @@ def run_script_through_websocket(script, session, host):
 
 def run_script(request, session):
     host = "ws://%s:%s/runScript" % (session.endpoint_ip,
-                                     config.VMMASTER_AGENT_PORT)
+                                     session.endpoint.get_bind_port(config.VMMASTER_AGENT_PORT))
 
     session.add_sub_step(
         control_line="%s %s" % (request.method, '/runScript'),

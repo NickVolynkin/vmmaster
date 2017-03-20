@@ -6,7 +6,7 @@ from threading import Thread, Lock
 from collections import defaultdict
 
 from core.config import config
-from core.network import Network
+from core.network import Network, DockerNetwork
 
 from vmpool.platforms import Platforms, UnlimitedCount
 from vmpool.artifact_collector import ArtifactCollector
@@ -17,7 +17,10 @@ log = logging.getLogger(__name__)
 class VirtualMachinesPool(object):
     pool = list()
     using = list()
-    network = Network()
+    if config.USE_KVM:
+        network = Network()
+    if config.USE_DOCKER and config.USE_CUSTOM_NETWORK and not config.BIND_LOCALHOST_PORTS:
+        network = DockerNetwork()
     lock = Lock()
     platforms = Platforms
     preloader = None
@@ -74,7 +77,8 @@ class VirtualMachinesPool(object):
         for vm in list(cls.pool):
             cls.pool.remove(vm)
             vm.delete(try_to_rebuild=False)
-        cls.network.delete()
+        if config.USE_KVM or (config.USE_DOCKER and config.USE_CUSTOM_NETWORK and not config.BIND_LOCALHOST_PORTS):
+            cls.network.delete()
 
     @classmethod
     def count(cls):
@@ -125,7 +129,7 @@ class VirtualMachinesPool(object):
         if not res:
             return None
 
-        if res.ping_vm():
+        if res.ping_vm(res.ports.values()):
             return res
         else:
             cls.using.remove(res)
@@ -269,6 +273,8 @@ class VirtualMachinesPoolPreloader(Thread):
             platforms.update(config.KVM_PRELOADED)
         if config.USE_OPENSTACK:
             platforms.update(config.OPENSTACK_PRELOADED)
+        if config.USE_DOCKER:
+            platforms.update(config.DOCKER_PRELOADED)
 
         for platform, need in platforms.iteritems():
             have = already_have.get(platform, 0)

@@ -18,6 +18,8 @@ from core import utils
 from core.exceptions import libvirtError, CreationException
 from core.config import config
 from core.utils import network_utils
+from core.clients.docker_client import DockerClient
+
 
 log = logging.getLogger(__name__)
 
@@ -61,8 +63,7 @@ class Clone(VirtualMachine):
     def save_artifacts(self, session, artifacts):
         return self.pool.save_artifact(session.id, artifacts)
 
-    def ping_vm(self):
-        ports = [config.SELENIUM_PORT, config.VMMASTER_AGENT_PORT]
+    def ping_vm(self, ports=config.PORTS):
         result = [False, False]
         timeout = config.PING_TIMEOUT
         start = time.time()
@@ -307,7 +308,7 @@ class OpenstackClone(Clone):
             elif self.is_created(server):
                 if method is not None:
                     method()
-                if self.ping_vm():
+                if self.ping_vm(ports=config.PORTS):
                     self.ready = True
                     break
                 if ping_retry > config.OPENSTACK_PING_RETRY_COUNT:
@@ -431,3 +432,143 @@ class OpenstackClone(Clone):
             except:
                 log.exception("Rebuild vm %s was FAILED." % self.name)
                 self.delete(try_to_rebuild=False)
+
+
+def clone_watcher(func):
+    @wraps(func)
+    def wrapper(self, *args, **kwargs):
+        self.update()
+        for value in func(self, *args, **kwargs):
+            time.sleep(1)
+        return value
+    return wrapper
+
+
+class DockerClone(Clone):
+    container = None
+
+    def __init__(self, origin, prefix, pool):
+        """
+        :type origin: DockerImage
+        """
+        super(DockerClone, self).__init__(origin, prefix, pool)
+        self.pool = pool
+        self.platform = origin.name
+        self.client = DockerClient()
+
+    def __str__(self):
+        return "{name}".format(name=self.name)
+
+    def get_bind_port(self, original_port):
+        if self.container:
+            return self.container.ports.get(original_port)
+
+    @property
+    def ports(self):
+        return self.container.ports
+
+    def update(self):
+        self.container = self.get_container()
+
+    def get_container(self):
+        if self.container:
+            return self.client.get_container(self.container.id)
+
+    def connect_network(self):
+        if self.container:
+            self.pool.network.connect_container(self.container.id)
+
+    def disconnect_network(self):
+        if self.container:
+            self.pool.network.disconnect_container(self.container.id)
+
+    def is_spawning(self):
+        return self.container.status.lower() in ('restarting', 'removing')
+
+    def is_created(self):
+        return self.container.status.lower() in ('created', 'running')
+
+    def is_broken(self):
+        return self.container.status.lower() in ('paused', 'exited', 'dead')
+
+    @clone_watcher
+    def create(self):
+        self.container = self.client.run_container(image=self.platform, ports=config.PORTS)
+        self.name = "{platform}-clone-{prefix}-{uuid}".format(
+            platform=self.platform, prefix=self.prefix, uuid=self.container.id
+        )
+        if not config.BIND_LOCALHOST_PORTS:
+            self.pool.network.connect_container(self.container.id)
+        self.ip = self.container.ip
+        log.info("Preparing %s..." % self.name)
+        for ready in self._wait_for_activated_service(
+                log.info("Creation vm %s was successful" % self.name)
+        ):
+            self.ready = ready
+            yield ready
+
+    def _wait_for_activated_service(self, method=None):
+        ready = None
+        ping_retry = 1
+
+        while not ready:
+            yield ready
+            self.container = self.get_container()
+            if self.is_spawning():
+                log.info("Virtual Machine %s is spawning..." % self.name)
+
+            elif self.is_created():
+                if not self.container.ip:
+                    log.info("Waiting ip for %s" % self.name)
+                    continue
+                self.ip = self.container.ip
+                if self.ping_vm(ports=self.container.ports.values()):
+                    ready = True
+                    if method is not None:
+                        method()
+                if ping_retry > config.OPENSTACK_PING_RETRY_COUNT:
+                    p = config.OPENSTACK_PING_RETRY_COUNT * config.PING_TIMEOUT
+                    log.info("VM %s pings more than %s seconds..." % (self.name, p))
+                    self.delete(try_to_rebuild=True)
+                    break
+                ping_retry += 1
+
+            elif self.is_broken():
+                raise CreationException("VM %s has not been created." % self.name)
+        yield ready
+
+    @clone_watcher
+    def delete(self, try_to_rebuild=False):
+        self.ready = False
+        if try_to_rebuild and self.is_preloaded():
+            self.rebuild()
+
+        if not config.BIND_LOCALHOST_PORTS:
+            self.pool.network.disconnect_container(self.container.id)
+        try:
+            self.pool.remove_vm(self)
+            self.container.stop()
+            self.container.remove()
+        except:
+            log.exception("Delete was failed")
+        yield True
+
+    @clone_watcher
+    def rebuild(self):
+        log.info("Rebuilding docker {clone}".format(clone=self.name))
+        self.ready = False
+        ready = None
+
+        try:
+            if self.is_preloaded():
+                self.pool.remove_vm(self)
+                self.pool.pool.append(self)
+            self.container.restart()
+            for ready in self._wait_for_activated_service(
+                lambda: log.info("Rebuild vm %s was successful" % self.name)
+            ):
+                yield ready
+        except:
+            log.exception("Restart was failed")
+            self.delete()
+        yield ready

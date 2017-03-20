@@ -3,10 +3,12 @@
 import logging
 import libvirt
 from uuid import uuid4
+from docker.models.networks import Network as DNetwork
 
 from core.network.network_xml import NetworkXml
 from core.network.mac_ip_table import MacIpTable
 from core.connection import Virsh
+from core.clients.docker_client import DockerClient, exception_handler
 
 log = logging.getLogger(__name__)
 
@@ -57,3 +59,29 @@ class Network(MacIpTable):
         net.destroy()
         net.undefine()
         del self
+
+
+class DockerNetwork:
+    def __init__(self):
+        self.name = "vmmaster"
+        self.network = None
+        self.client = DockerClient()
+        self.network = self.create()
+
+    def create(self):
+        """
+
+        :rtype: DNetwork
+        """
+        self.delete(self.name)
+        return self.client.create_network(self.name)
+
+    def delete(self, name=None):
+        nid = name if name else self.network.id
+        self.client.delete_network(nid)
+
+    def connect_container(self, container_id):
+        self.network.connect(container_id)
+
+    def disconnect_container(self, container_id):
+        self.network.disconnect(container_id)
