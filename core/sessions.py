@@ -171,7 +171,8 @@ class Session(models.Session):
         self.set_vm(endpoint)
         self.status = "running"
         self.vnc_helper = VNCVideoHelper(self.endpoint_ip,
-                                         filename_prefix=self.id)
+                                         filename_prefix=self.id,
+                                         port=self.endpoint.get_bind_port(config.VNC_PORT))
 
         if self.take_screencast:
             self.vnc_helper.start_recording()

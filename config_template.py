@@ -70,5 +70,7 @@ class Config(object):
     # selenium
     SELENIUM_PORT = 4455
     VMMASTER_AGENT_PORT = 9000
+    VNC_PORT = 5900
+    PORTS = [SELENIUM_PORT, VMMASTER_AGENT_PORT, VNC_PORT]
 
     THREAD_POOL_MAX = 100
