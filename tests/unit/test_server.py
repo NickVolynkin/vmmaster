@@ -64,10 +64,6 @@ class BaseTestServer(BaseTestCase):
     drive_path=Mock()
 )
 @patch(
-    'vmmaster.webdriver.commands.ping_vm',
-    new=Mock(side_effect=ping_vm_true_mock)
-)
-@patch(
     'vmmaster.webdriver.commands.selenium_status',
     new=Mock(
         __name__="selenium_status",
@@ -623,10 +619,6 @@ def custom_wait(self, method):
 
 
 @patch(
-    'vmmaster.webdriver.commands.ping_vm',
-    new=Mock(__name__="check_vm_online", side_effect=ping_vm_true_mock)
-)
-@patch(
     'vmmaster.webdriver.commands.selenium_status',
     new=Mock(
         __name__="selenium_status",
@@ -798,10 +790,6 @@ class TestSessionSteps(BaseTestServer):
         self.assertEqual(add_step_mock.call_count, 1)
 
     @patch(
-        'vmmaster.webdriver.commands.ping_vm',
-        new=Mock(side_effect=ping_vm_true_mock)
-    )
-    @patch(
         'vmmaster.webdriver.commands.selenium_status',
         new=Mock(
             __name__="selenium_status",
@@ -874,10 +862,6 @@ class TestRunScriptTimeGreaterThenSessionTimeout(BaseTestCase):
         server_is_down(self.address)
         self.ctx.pop()
 
-    @patch(
-        'vmmaster.webdriver.commands.ping_vm',
-        new=Mock(side_effect=ping_vm_true_mock)
-    )
     @patch(
         'vmmaster.webdriver.commands.selenium_status',
         new=Mock(side_effect=selenium_status_true_mock)

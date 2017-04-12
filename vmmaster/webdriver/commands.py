@@ -2,16 +2,14 @@
 
 import json
 import httplib
-from functools import partial, wraps
+from functools import wraps
 import websocket
 import logging
 
 from traceback import format_exc
 from core import utils
-from core.utils import network_utils
-from core.utils import generator_wait_for
 
-from vmmaster.webdriver.helpers import check_to_exist_ip, connection_watcher
+from vmmaster.webdriver.helpers import connection_watcher
 
 from core.config import config
 from core.exceptions import CreationException
@@ -57,9 +55,6 @@ def start_session(request, session):
              % (session.id, session.endpoint_name, session.endpoint_ip))
     status, headers, body = None, None, None
 
-    ping_vm(session)
-    yield status, headers, body
-
     selenium_status(request, session, config.SELENIUM_PORT)
     yield status, headers, body
 
@@ -89,32 +84,6 @@ def startup_script(session):
     if script_result.get("status") != 0:
         raise Exception("failed to run script with code %s:\n%s" % (
             script_result.get("status"), script_result.get("output")))
-
-
-@connection_watcher
-def ping_vm(session):
-    ip = check_to_exist_ip(session)
-    ports = [config.SELENIUM_PORT, config.VMMASTER_AGENT_PORT]
-
-    log.info("Starting ping: {ip}:{ports}".format(ip=ip, ports=str(ports)))
-    _ping = partial(network_utils.ping, ip)
-
-    def check():
-        return all(map(_ping, ports))
-    for _ in generator_wait_for(check, config.PING_TIMEOUT):
-        yield False
-
-    result = map(_ping, ports)
-    if not all(result):
-        fails = [port for port, res in zip(ports, result) if res is False]
-        raise CreationException("Failed to ping ports %s" % str(fails))
-
-    if session.closed:
-        raise CreationException("Session was closed while ping")
-
-    log.info("Ping successful: {ip}:{ports}".format(ip=ip, ports=str(ports)))
-
-    yield True
 
 
 @connection_watcher

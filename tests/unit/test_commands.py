@@ -13,6 +13,14 @@ from core.config import setup_config, config
 from flask import Flask
 
 
+def make_failed_request_mock(arg1, arg2):
+    yield 200, {}, json.dumps({'status': 1})
+
+
+def make_succeed_request_mock(arg1, arg2):
+    yield 200, {}, json.dumps({'status': 0})
+
+
 class CommonCommandsTestCase(BaseTestCase):
     webdriver_server = None
     vmmaster_agent = None
@@ -98,10 +106,6 @@ class CommonCommandsTestCase(BaseTestCase):
         del cls.app
 
 
-def ping_vm_mock(arg):
-    yield None
-
-
 def selenium_status_mock(arg1, arg2, arg3):
     yield None
 
@@ -111,10 +115,6 @@ def selenium_status_mock(arg1, arg2, arg3):
         __name__="start_selenium_session",
         side_effect=selenium_status_mock
     )
-)
-@patch(
-    'vmmaster.webdriver.commands.ping_vm',
-    new=Mock(__name__="ping_vm", side_effect=ping_vm_mock)
 )
 @patch(
     'vmmaster.webdriver.helpers.is_request_closed',
@@ -129,13 +129,10 @@ class TestStartSessionCommands(CommonCommandsTestCase):
     def test_start_session_when_selenium_status_failed(self):
         request = copy.copy(self.request)
 
-        def make_request_mock(arg1, arg2):
-            yield 200, {}, json.dumps({'status': 1})
-
         with patch(
             'core.sessions.Session.make_request', Mock(
                 __name__="make_request",
-                side_effect=make_request_mock
+                side_effect=make_failed_request_mock
             )
         ):
             self.assertRaises(
@@ -148,9 +145,10 @@ class TestStartSessionCommands(CommonCommandsTestCase):
         Mock(return_value=True)
     )
     @patch(
-        'requests.request', Mock(side_effect=Mock(
-            __name__="request",
-            return_value=(200, {}, json.dumps({'status': 0}))))
+        'core.sessions.Session.make_request', Mock(
+            __name__="make_request",
+            side_effect=make_succeed_request_mock
+        )
     )
     def test_start_session_when_session_was_timeouted(self):
         request = copy.copy(self.request)
@@ -162,9 +160,10 @@ class TestStartSessionCommands(CommonCommandsTestCase):
         Mock(return_value=True)
     )
     @patch(
-        'requests.request', Mock(side_effect=Mock(
-            __name__="request",
-            return_value=(200, {}, json.dumps({'status': 0}))))
+        'core.sessions.Session.make_request', Mock(
+            __name__="make_request",
+            side_effect=make_succeed_request_mock
+        )
     )
     def test_start_session_when_session_was_closed(self):
         request = copy.copy(self.request)
@@ -288,29 +287,6 @@ class TestCheckVmOnline(CommonCommandsTestCase):
     def tearDown(self):
         super(TestCheckVmOnline, self).tearDown()
         Handler.do_GET = self._handler_get
-
-    def test_check_vm_online_ok(self):
-        def do_GET(handler):
-            handler.send_reply(200, self.response_headers,
-                               body=self.response_body)
-        Handler.do_GET = do_GET
-        result = self.commands.ping_vm(self.session)
-        self.assertTrue(result)
-
-    def test_check_vm_online_ping_failed_timeout(self):
-        config.SELENIUM_PORT = get_free_port()
-
-        self.assertRaises(
-            CreationException, self.commands.ping_vm, self.session
-        )
-
-    def test_check_vm_online_ping_failed_when_session_closed(self):
-        config.PING_TIMEOUT = 2
-        self.session.closed = True
-
-        self.assertRaises(
-            CreationException, self.commands.ping_vm, self.session
-        )
 
     def test_check_vm_online_status_failed(self):
         def do_GET(handler):
